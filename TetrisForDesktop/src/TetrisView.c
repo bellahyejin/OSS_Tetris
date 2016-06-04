@@ -21,8 +21,19 @@ enum MenuStartPosition{
 	MAIN_MENU_X = 18, MAIN_MENU_Y = 7, PAUSE_MENU_X = 5, PAUSE_MENU_Y = 12, END_MENU_X = 14, END_MENU_Y = 8
 };
 
+void TetrisView_Bgm(TetrisView* tetrisView, int mode){
+	switch(mode)
+	{
+	case 1:
+		PlaySound(TEXT(TETRIS_BACKGROUND_MUSIC_FILE_NAME), NULL, SND_ASYNC | SND_LOOP);
+		break;
+	case 2:
+		PlaySound(NULL, 0, 0);
+		break;
+	}
+}
+
 void TetrisView_StartGame(TetrisView* tetrisView){
-	PlaySound(TEXT(TETRIS_BACKGROUND_MUSIC_FILE_NAME), NULL, SND_ASYNC | SND_LOOP);
 	if (!(tetrisView->level >= MIN_SPEED_LEVEL && tetrisView->level <= MAX_SPEED_LEVEL)){
 		tetrisView->level = MIN_SPEED_LEVEL;
 	}
@@ -33,7 +44,8 @@ void TetrisView_StartGame(TetrisView* tetrisView){
 	TetrisManager_PrintDetailInfomation(&tetrisView->tetrisManager);
 }
 
-void TetrisView_ProcessGame(TetrisView* tetrisView, int processType, int direction){
+//// 매개변수 isSplash 추가
+void TetrisView_ProcessGame(TetrisView* tetrisView, int processType, int direction, int isSplash){
 
 	//it is used to move left or right at bottom in case of space which you want to move is available
 	static int processReachedCaseCount = 0;
@@ -46,6 +58,10 @@ void TetrisView_ProcessGame(TetrisView* tetrisView, int processType, int directi
 	else if (processType == AUTO){
 		TetrisManager_ProcessAuto(&tetrisView->tetrisManager);
 	}
+
+	//// 매 loop마다 검사하기 위한 splash 함수 호출
+	splash(&tetrisView->tetrisManager, direction, isSplash);
+
 	if (TetrisManager_IsReachedToBottom(&tetrisView->tetrisManager, MOVING_BLOCK)){
 		if (processType == DIRECT_DOWN){
 			processReachedCaseCount = 0;
@@ -80,7 +96,6 @@ void TetrisView_PauseGame(TetrisView* tetrisView){
 	switch (tetrisView->pauseMenu){
 	case RESUME_PAUSE_MENU:
 		TetrisManager_StartTotalTime(&tetrisView->tetrisManager);
-		PlaySound(TEXT(TETRIS_BACKGROUND_MUSIC_FILE_NAME), NULL, SND_ASYNC | SND_LOOP);
 		break;
 	case MAIN_MENU_PAUSE_MENU:
 		TetrisManager_StopTotalTime(&tetrisView->tetrisManager);
@@ -333,20 +348,20 @@ void TetrisView_MakeHold(TetrisView* tetrisView){
 	TetrisManager_MakeHold(&tetrisView->tetrisManager);
 }
 
-void TetrisView_Item_RemoveOneRow(TetrisView* tetrisView){
+/*void TetrisView_Item_RemoveOneRow(TetrisView* tetrisView){
 	//아이템1 : 한 줄 제거
 	TetrisManager_Item_RemoveOneRow(&tetrisView->tetrisManager);
-}
+}*/
 
-void TetrisView_Item_RemoveTwoRow(TetrisView* tetrisView){
+/*void TetrisView_Item_RemoveTwoRow(TetrisView* tetrisView){
 	//아이템2 : 두 줄 제거
 	TetrisManager_Item_RemoveTwoRow(&tetrisView->tetrisManager);
-}
+}*/
 
-void TetrisView_Item_RemoveAllRow(TetrisView* tetrisView){
+/*void TetrisView_Item_RemoveAllRow(TetrisView* tetrisView){
 	//아이템3 : 전체 줄 제거
 	TetrisManager_Item_RemoveAllRow(&tetrisView->tetrisManager);
-}
+}*/
 
 //다음블럭과 다다음블럭 바꾸기
 void TetrisView_ChangeNextBlock(TetrisView* tetrisView){

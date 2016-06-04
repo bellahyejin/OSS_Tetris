@@ -57,6 +57,9 @@ static void _TetrisManager_MakeObstacleOneLine(TetrisManager* tetrisManager);
 static void _TetrisManager_PrintItemInventory(TetrisManager* tetrisManager, int list, int index, int x, int y); //하나의 아이템 박스 생성
 static void _TetrisManager_PrintAllItemInventory(TetrisManager* tetrisManager); //전체 아이템 박스 version 2
 
+/////레벨 별 맵 설정
+static void _TetrisManager_LevelMap(TetrisManager* tetrisManager, int speedLevel, int status);
+
 //아이템에 의해 줄이 제거되는 경우 점수와 레벨에 반영되지 않는다.
 static void _TetrisManager_Item_DeleteLines(TetrisManager* tetrisManager, int* indexes, int count);
 
@@ -72,10 +75,15 @@ static void TetrisManager_SearchAllLineIndexesToDelete(TetrisManager* tetrisMana
 //다음블럭과 다다음블럭을 바꿀 수 있는 횟수를 레벨에 맞게 수정한다.
 void TetrisManager_InitializeNextCount(TetrisManager* tetrisManager, int speedLevel);	
 
+//다음블록과 다다음블록을 바꿀 수 있는 횟수를 화면에 출력한다.
+void TetrisManager_PrintChangeNextCount(TetrisManager tetrisManager);
+
 void TetrisManager_Init(TetrisManager* tetrisManager, int speedLevel){
 	Block block;
+	int i;
+
 	block.current = -1;
-	_TetrisManager_InitBoard(tetrisManager);
+	_TetrisManager_InitBoard(tetrisManager, speedLevel);
 	tetrisManager->block = Block_Make(True, block);
 	tetrisManager->shadow = tetrisManager->block;
 	tetrisManager->isHoldAvailable = True;
@@ -86,7 +94,7 @@ void TetrisManager_Init(TetrisManager* tetrisManager, int speedLevel){
 	tetrisManager->totalTimeThread = NULL;
 	tetrisManager->totalTime = 0;
 	tetrisManager->isTotalTimeAvailable = False;
-	for (int i = 0; i < 5; i++){
+	for (i = 0; i < 5; i++){
 		tetrisManager->itemArray[i] = 0;
 	}
 	itemCreateCnt = 0;
@@ -148,6 +156,10 @@ void TetrisManager_ProcessDeletingLines(TetrisManager* tetrisManager){
 		TetrisManager_PrintBoard(tetrisManager);
 		_TetrisManager_PrintStatus(tetrisManager, x, y);
 		TetrisManager_AddItem(tetrisManager); //라인을 깰때마다 실행
+
+		WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+		TetrisManager_PrintChangeNextCount(*tetrisManager);						// 다음블록과 다다음블록을 바꿀 수 있는 횟수를 출력
+		ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
 	}
 }
 
@@ -189,6 +201,7 @@ int TetrisManager_ProcessReachedCase(TetrisManager* tetrisManager){
 	} else{
 		makeObstacleOneLineCount++;
 	}
+
 	/*WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		//LOCK 걸기(다른 부분에서 커서의 색상을 변경하는 것을 막기위해 임계구역으로 보호)
 	Block_PrintNext(tetrisManager->block, 0, x, y);
 	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
@@ -198,9 +211,11 @@ int TetrisManager_ProcessReachedCase(TetrisManager* tetrisManager){
 	Block_PrintNext(tetrisManager->block, 1, x, y);
 	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
 	*/
+
 	/*Block_PrintNext(tetrisManager->block, 0, x, y);
 	x += 20;
 	Block_PrintNext(tetrisManager->block, 1, x, y);*/
+
 	tetrisManager->isHoldAvailable = True;
 	if (TetrisManager_IsReachedToBottom(tetrisManager, MOVING_BLOCK)){
 		Block_Destroy(tetrisManager->block);
@@ -300,6 +315,14 @@ void TetrisManager_PrintDetailInfomation(TetrisManager* tetrisManager){
 
 	TetrisManager_StartTotalTime(tetrisManager);
 	_TetrisManager_PrintTotalTime(*tetrisManager);
+
+	x = 35;
+	y = 20;
+
+	WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+	TetrisManager_PrintChangeNextCount(*tetrisManager);
+	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
+
 	/*_TetrisManager_PrintStatus(tetrisManager, x, y);
 	x += 6;
 	y += 4;
@@ -339,8 +362,8 @@ DWORD TetrisManager_GetDownMilliSecond(TetrisManager* tetrisManager){
 void TetrisManager_MakeHold(TetrisManager* tetrisManager){
 
 	// use temp size (magic number)
-	int x = 60;
-	int y = 20;
+	int x = 63;
+	int y = 19;
 
 	if (tetrisManager->isHoldAvailable){
 		_TetrisManager_PrintBlock(tetrisManager, MOVING_BLOCK, EMPTY);
@@ -376,16 +399,16 @@ void TetrisManager_StopTotalTime(TetrisManager* tetrisManager){
 }
 
 void TetrisManager_AddItem(TetrisManager* tetrisManager){ // 혜진 수정
-
+	int i;
 
 	if (itemCreateCnt == 4){ //4개 아이템이 생성되었을 경우 
-		for (int i = 0; i < ITEM_LIST_SIZE; i++){
+		for (i = 0; i < ITEM_LIST_SIZE; i++){
 			tetrisManager->itemArray[i] = tetrisManager->itemArray[i + 1]; //가장 앞자리에 있는 아이템을 버리게 됨
 		}
 		itemCreateCnt--; //카운트 변수를 1감소 시켜서 아래 조건문을 실행 하게 한다.
 	}
 
-	if (tetrisManager->deletedLineCount % 1 == 0){ //그 이후 5줄을 꺴을 경우
+	if (tetrisManager->deletedLineCount % 5 == 0){ //그 이후 5줄을 꺴을 경우
 
 		tetrisManager->itemArray[itemCreateCnt] = rand() % (ITEM_SIZE - 1) + 1; //랜덤의 아이템을 생성한다.
 		itemCreateCnt++; //아이템이 생성된 횟수 
@@ -398,6 +421,7 @@ void TetrisManager_AddItem(TetrisManager* tetrisManager){ // 혜진 수정
 }//아이템 추가 함수
 
 void TetrisManager_UseItem(TetrisManager* tetrisManager, int index) {
+	int i;
 
 	switch (tetrisManager->itemArray[index-1])
 	{
@@ -418,16 +442,17 @@ void TetrisManager_UseItem(TetrisManager* tetrisManager, int index) {
 	}
 	case 4: {
 		//속도 줄이기
+		TetrisManager_randSpeed(tetrisManager);
 		break;
 	}
-	case 5: {
+	/*case 5: {
 		//속도 올리기
 		break;
-	}
+	}*/
 	}
 	//printf("%d", tetrisManager->itemArray[index - 1]);
 	itemCreateCnt--;
-	for (int i = index - 1; i < ITEM_LIST_SIZE; i++){
+	for (i = index - 1; i < ITEM_LIST_SIZE; i++){
 		tetrisManager->itemArray[i] = tetrisManager->itemArray[i + 1];
 	}
 	WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
@@ -510,6 +535,10 @@ static void _TetrisManager_PrintAllItemInventory(TetrisManager* tetrisManager){
 	_TetrisManager_PrintItemInventory(tetrisManager, 4, tetrisManager->itemArray[3], STATUS_POSITION_X_TO_PRINT, STATUS_POSITION_Y_TO_PRINT + 13);
 	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
 
+	WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+	TetrisManager_PrintChangeNextCount(*tetrisManager);
+	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
+
 }//전체 아이템 박스
 
 static void _TetrisManager_PrintBlock(TetrisManager* tetrisManager, int blockType, int status){
@@ -540,7 +569,7 @@ static void _TetrisManager_PrintBlock(TetrisManager* tetrisManager, int blockTyp
 	_TetrisManager_PrintTotalTime(*tetrisManager); // because of multi thread problem, this function covers total time
 }
 
-static void _TetrisManager_InitBoard(TetrisManager* tetrisManager){
+static void _TetrisManager_InitBoard(TetrisManager* tetrisManager, int speedLevel){
 	int i;
 	memset(tetrisManager->board, EMPTY, sizeof(char)* BOARD_ROW_SIZE * BOARD_COL_SIZE);
 	for (i = 0; i < BOARD_ROW_SIZE; i++){
@@ -562,6 +591,177 @@ static void _TetrisManager_InitBoard(TetrisManager* tetrisManager){
 	tetrisManager->board[0][BOARD_COL_SIZE - 1] = RIGHT_TOP_EDGE;
 	tetrisManager->board[BOARD_ROW_SIZE - 1][0] = LEFT_BOTTOM_EDGE;
 	tetrisManager->board[BOARD_ROW_SIZE - 1][BOARD_COL_SIZE - 1] = RIGHT_BOTTOM_EDGE;
+
+	_TetrisManager_LevelMap(tetrisManager, speedLevel, FIXED_BLOCK); /////speedLevel에 따른 맵 설정
+}
+
+static void _TetrisManager_LevelMap(TetrisManager* tetrisManager, int speedLevel, int status){
+	int i, j, k;
+
+	switch(speedLevel){
+	case 1 :
+		break;
+	case 2:
+		for(i=17; i<=22; i++){
+			for(j=1; j<=4; j++)
+				tetrisManager->board[i][j]=status;
+			for(j=7; j<=12; j++)
+				tetrisManager->board[i][j]=status;
+		}
+		break;
+	case 3:
+		for(j=2; j<=11; j++)
+			tetrisManager->board[22][j]=status;
+		for(j=3; j<=10; j++)
+			tetrisManager->board[21][j]=status;
+		for(j=4; j<=9; j++)
+			tetrisManager->board[20][j]=status;
+		for(j=5; j<=8; j++)
+			tetrisManager->board[19][j]=status;
+		for(j=6; j<=7; j++)
+			tetrisManager->board[18][j]=status;
+		break;
+	case 4:
+		for(i=17; i<=22; i++){
+			for(j=1; j<=4; j++)
+				tetrisManager->board[i][j]=status;
+			for(j=9; j<=12; j++)
+				tetrisManager->board[i][j]=status;
+		}
+		tetrisManager->board[17][5]=status;
+		tetrisManager->board[17][8]=status;
+		tetrisManager->board[22][5]=status;
+		tetrisManager->board[22][8]=status;
+		break;
+	case 5:
+		for(j=2; j<=12; j++)
+			tetrisManager->board[22][j]=status;
+		for(j=3; j<=12; j++)
+			tetrisManager->board[21][j]=status;
+		for(j=4; j<=12; j++)
+			tetrisManager->board[20][j]=status;
+		for(j=5; j<=12; j++)
+			tetrisManager->board[19][j]=status;
+		for(j=6; j<=12; j++)
+			tetrisManager->board[18][j]=status;
+		for(j=7; j<=12; j++)
+			tetrisManager->board[17][j]=status;
+		for(j=8; j<=12; j++)
+			tetrisManager->board[16][j]=status;
+		for(j=9; j<=12; j++)
+			tetrisManager->board[15][j]=status;
+		for(j=10; j<=12; j++)
+			tetrisManager->board[14][j]=status;
+		for(j=11; j<=12; j++)
+			tetrisManager->board[13][j]=status;
+		tetrisManager->board[12][12]=status;
+		break;
+	case 6:
+		for(i=17; i<=18; i++){
+			tetrisManager->board[i][2]=status;
+			tetrisManager->board[i][11]=status;
+		}
+		for(i=16; i<=19; i++){
+			tetrisManager->board[i][3]=status;
+			tetrisManager->board[i][10]=status;
+		}
+		for(i=16; i<=20; i++){
+			tetrisManager->board[i][4]=status;
+			tetrisManager->board[i][9]=status;
+		}
+		for(i=17; i<=21; i++){
+			tetrisManager->board[i][5]=status;
+			tetrisManager->board[i][8]=status;
+		}
+		for(i=18; i<=22; i++){
+			tetrisManager->board[i][6]=status;
+			tetrisManager->board[i][7]=status;
+		}
+		break;
+	case 7:
+		for(j=1; j<=11; j++)
+			tetrisManager->board[12][j]=status;
+		for(j=1; j<=10; j++)
+			tetrisManager->board[13][j]=status;
+		for(j=1; j<=9; j++)
+			tetrisManager->board[14][j]=status;
+		for(j=1; j<=8; j++)
+			tetrisManager->board[15][j]=status;
+		for(j=1; j<=7; j++)
+			tetrisManager->board[16][j]=status;
+		for(j=1; j<=6; j++)
+			tetrisManager->board[17][j]=status;
+		for(j=1; j<=5; j++)
+			tetrisManager->board[18][j]=status;
+		for(j=1; j<=4; j++)
+			tetrisManager->board[19][j]=status;
+		for(j=1; j<=3; j++)
+			tetrisManager->board[20][j]=status;
+		for(j=1; j<=2; j++)
+			tetrisManager->board[21][j]=status;
+		tetrisManager->board[22][1]=status;
+		break;
+	case 8:
+		for(i=14; i<=22; i++){
+			j=26-i;
+			tetrisManager->board[i][j]=status;
+		}
+		for(i=16; i<=22; i++){
+			j=28-i;
+			tetrisManager->board[i][j]=status;
+		}
+		for(i=18; i<=22; i++){
+			j=30-i;
+			tetrisManager->board[i][j]=status;
+		}
+		for(i=20; i<=22; i++){
+			j=32-i;
+			tetrisManager->board[i][j]=status;
+		}
+		tetrisManager->board[22][12]=status;
+		break;
+	case 9:
+		for(j=2; j<=3; j++)
+			tetrisManager->board[12][j]=status;
+		for(j=1; j<=5; j++)
+			tetrisManager->board[13][j]=status;
+		tetrisManager->board[14][1]=status;
+		for(j=5; j<=6; j++)
+			tetrisManager->board[14][j]=status;
+		for(j=6; j<=7; j++)
+			tetrisManager->board[15][j]=status;
+		for(i=14; i<=19; i++)
+			tetrisManager->board[i][4]=status;
+		tetrisManager->board[18][1]=status;
+		for(j=8; j<=11; j++)
+			tetrisManager->board[18][j]=status;
+		for(j=1; j<=2; j++)
+			tetrisManager->board[19][j]=status;
+		for(j=7; j<=12; j++)
+			tetrisManager->board[19][j]=status;
+		for(j=1; j<=8; j++)
+			tetrisManager->board[20][j]=status;
+		for(j=10; j<=12; j++)
+			tetrisManager->board[20][j]=status;
+		for(j=1; j<=7; j++)
+			tetrisManager->board[21][j]=status;
+		tetrisManager->board[21][9]=status;
+		for(j=11; j<=12; j++)
+			tetrisManager->board[21][j]=status;
+		for(j=1; j<=8; j++)
+			tetrisManager->board[22][j]=status;
+		for(j=10; j<=12; j++)
+			tetrisManager->board[22][j]=status;
+		break;
+	case 10:
+		srand((unsigned int)time(NULL));
+		for(k=1; k<=95; k++){
+			i=22-(rand()%9);
+			j=12-(rand()%12);
+			tetrisManager->board[i][j]=status;
+		}
+		break;
+	}
 }
 
 static void _TetrisManager_UpSpeedLevel(TetrisManager* tetrisManager){
@@ -792,7 +992,7 @@ static void _TetrisManager_PrintTotalTime(TetrisManager tetrisManager){
 	int second = tetrisManager.totalTime % 60;
 
 	// use temp size (magic number)
-	int x = 42;
+	int x = 50;
 	int y = 20;
 
 	WaitForSingleObject(tetrisManager.mutex,INFINITE);		// LOCK 걸기
@@ -1027,8 +1227,12 @@ void TetrisManager_ChangeNextBlock(TetrisManager* tetrisManager){
 		ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
 
 		tetrisManager->changeNextCount--;											// 다음블록과 다다음블록을 바꿀 수 있는 횟수를 1회 차감
-	}
-	printf("%d",tetrisManager->changeNextCount);										// 다음블록과 다다음블록을 바꿀 수 있는 횟수를 출력
+	}	
+
+	WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+	TetrisManager_PrintChangeNextCount(*tetrisManager);								// 다음블록과 다다음블록을 바꿀 수 있는 횟수를 출력
+	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
+
 }
 
 static void TetrisManager_InitializeNextCount(TetrisManager* tetrisManager,int speedLevel){
@@ -1075,7 +1279,9 @@ static void TetrisManager_InitializeNextCount(TetrisManager* tetrisManager,int s
 			tetrisManager->blindNextInterval=1;
 			break;
 	}
-	printf("%d",tetrisManager->changeNextCount);
+	WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+	TetrisManager_PrintChangeNextCount(*tetrisManager);								// 다음블록과 다다음블록을 바꿀 수 있는 횟수를 출력
+	ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
 }
 
 void TetrisManager_BlindNextBlock(TetrisManager* tetrisManager){
@@ -1110,4 +1316,104 @@ void changeShadowColor(int level) {
 		{
 			FontUtil_ChangeFontColor(0); // 그림자를 BLACK색으로 출력 (안보이게 함)
 		}
+}
+
+//// 안개 아이템 함수 정의
+void splash(TetrisManager* tetrisManager, int blockType, int isSplash)
+{
+	int i, j;
+
+	////현재 splash(안개 아이템) 작동 시 '▒'(안개) 표시
+	if (isSplash == 1)
+	{
+		if (tetrisManager->isSplashMode == 1)
+		{
+			WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+			for (i = 1; i < BOARD_ROW_SIZE - 1; i++) {
+				for (j = 1; j < BOARD_COL_SIZE - 1; j++) {
+					if (tetrisManager->board[i][j] == FIXED_BLOCK) //// fixed block을 기준으로 가로,세로 길이 탐색
+					{
+						
+						for (j = 1; j < BOARD_COL_SIZE - 1; j++) {
+							CursorUtil_GotoXY(2 * j, i);;
+							printf("▒"); //// 탐색한 길이 만큼 출력 
+						}
+						
+					}
+				}
+			}
+			ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
+		}
+	}
+	////splash가 끝났을 때 원상복구
+	else
+	{
+		if (tetrisManager->isSplashMode == 0)
+		{
+			for (i = 1; i < BOARD_ROW_SIZE - 1; i++) {
+				for (j = 1; j < BOARD_COL_SIZE - 1; j++) {
+					if (tetrisManager->board[i][j] == FIXED_BLOCK) //// fixed block을 기준으로 가로,세로 길이 탐색
+					{
+						WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+						CursorUtil_GotoXY(2 * j, i);;
+						printf("▩"); //// 탐색한 길이 만큼 출력
+						ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
+					}
+					else if (tetrisManager->board[i][j] == EMPTY) //// 빈 공간을 기준으로 가로,세로 길이 탐색
+					{
+						WaitForSingleObject(((TetrisManager*)tetrisManager)->mutex, INFINITE);		// LOCK 걸기
+						CursorUtil_GotoXY(2 * j, i);;
+						printf("  "); //// 탐색한 길이 만큼 출력
+						ReleaseMutex(((TetrisManager*)tetrisManager)->mutex);						// LOCK 해제
+					}
+				}
+			}
+			tetrisManager->isSplashMode = 1;
+		}
+	}
+}
+
+//// 랜덤 속도 아이템 함수 정의
+void TetrisManager_randSpeed(TetrisManager* tetrisManager)
+{
+	int randNum;
+
+	///// speedLevel이 3이상일 때만 사용가능
+	if (tetrisManager->randSpeedTimer == 0 && tetrisManager->speedLevel >= 3)
+	{
+		//// 아이템 실행 시작 시간을 구함 (단위 : 초)
+		tetrisManager->randSpeedTimer = time(NULL);
+		srand(time(NULL));
+
+		//// 랜덤 값 구함 ( 0 ~ 1 )
+		randNum = rand() % 2;
+
+		//// 랜덤 값이 0 일 때는 속도 = 속도 - 2
+		if (randNum == 0)
+		{
+			tetrisManager->diff_speed = -2;
+		}
+		//// 랜덤 값이 1 일 때는 속도 = 속도 + 2 
+		else
+		{
+			tetrisManager->diff_speed = 2;
+		}
+		tetrisManager->speedLevel += tetrisManager->diff_speed;
+	}
+}
+
+void TetrisManager_PrintChangeNextCount(TetrisManager tetrisManager){
+	// use temp size (magic number)
+	int x = 38;
+	int y = 20;
+
+	WaitForSingleObject(tetrisManager.mutex,INFINITE);		// LOCK 걸기
+	CursorUtil_GotoXY(x, y++);
+	printf("┏ Change ┓");
+	CursorUtil_GotoXY(x, y++);
+	printf("┃   %02d   ┃", tetrisManager.changeNextCount);
+	CursorUtil_GotoXY(x, y++);
+	printf("┗━━━━┛");
+	ReleaseMutex(tetrisManager.mutex);						// LOCK 해제
+	
 }
